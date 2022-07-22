@@ -29,8 +29,16 @@ $ catkin build carcara
 $ source (YOUR WORKSPACE PATH)/devel/setup.bash
 ```
 
-For the simulated example launch the following
+For the simulated example with 1, 3 or 5 drones respectively launch one of the following
 
 ```bash
-$ roslaunch examples drone.launch
+$ roslaunch examples drone1.launch
+$ roslaunch examples drone3.launch
+$ roslaunch examples drone5.launch
+```
+
+To run a simulation with 25 drones, launch the following (it's recommended to have better computational resources)
+
+```bash
+$ roslaunch examples drone25.launch
 ```
