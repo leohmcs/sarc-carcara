@@ -10,6 +10,8 @@ from visualization_msgs.msg import Marker, MarkerArray
 import tf
 from tf2_msgs.msg import TFMessage
 from std_msgs.msg import Float32, Float32MultiArray
+from robotsim.msg import Vision_msg
+
 import numpy as np
 import sys
 from distancefield.msg import Path, PathEq
@@ -55,14 +57,17 @@ class Paths:
             self.vis_subscriber.append([])
 
         # Variables of simulation states and set constants
+        self.search_site = 0
         self.saw_it = 0
         self.got_there = 0
         self.got_there2 = 0
         self.predefined = [6,6,0]
+        self.range_vision = 1.5
         self.height = 3
         self.area = Point()
         self.area.x = 10
         self.area.y = 10
+        self.pos_search_site = []
 
         self.freq = 10.0
         self.rate = rospy.Rate(10)
@@ -77,7 +82,7 @@ class Paths:
         if self.number_of_robots > 0:
             for i in range(self.number_of_robots):
                 self.pos_subscriber[i] = rospy.Subscriber(f"/drone/odom{i}",  Odometry, self.odometry_cb, (i))
-                self.vis_subscriber[i] = rospy.Subscriber(f"/vision_state0",  Float32MultiArray, self.vision_cb, (i))
+                self.vis_subscriber[i] = rospy.Subscriber(f"/vision_state0",  Vision_msg, self.vision_cb, (i))
 
 
 
@@ -90,10 +95,10 @@ class Paths:
 
     # Callback of robots sensor data
     def vision_cb(self,data, args):
-        self.seen_it[args] = data.data[0]
-        self.pos_des[args] = list(data.data[1:4])
+        self.seen_it[args] = data.saw_it
+        self.pos_des[args] = [data.x,data.y,data.z]
 
-        self.fire_extinguished[args] = data.data[4]
+        self.fire_extinguished[args] = data.fire_extinguished
         
 
     # ----------  ----------  ----------  ----------  ----------
@@ -142,23 +147,23 @@ class Paths:
 
         if (p0[0] - del_x) > 0:
             right_to_area = True
-            p_now_x = del_x 
+            p_now_x = del_x -h
             p_final_x = del_x - del_w
 
         else:
             right_to_area = False
-            p_now_x = del_x - del_w
+            p_now_x = del_x - del_w + h
             p_final_x = del_x 
 
         if (p0[1] - (del_y + del_h)) > 0:
             above_area = True
-            p_now_y = del_y + del_h
+            p_now_y = del_y + del_h - h
             p_final_y = del_y
             inicio = 3
 
         else:
             above_area = False
-            p_now_y = del_y 
+            p_now_y = del_y + h
             p_final_y = del_y + del_h
             inicio = 1
 
@@ -169,11 +174,9 @@ class Paths:
         # Loop to sample the curve
         path = [[],[],[]]
 
-        path = self.refference_path_2(10,p0,[p_now.x,p_now.y,self.height])
-
         while self.comparison(p_now.x, p_final_x, right_to_area):
             if inicio == 1: # sobe
-                princ = np.arange(p_now_y, p_now_y + del_h,0.1)
+                princ = np.arange(p_now_y, p_now_y + del_h - h,0.1)
                 print("MELECA")
                 print(p_now.x,p_final_x)
                 print(self.comparison(p_now.x, p_final_x, right_to_area))
@@ -181,7 +184,7 @@ class Paths:
                 path[1] = np.hstack((path[1],princ))
                 path[2] = np.hstack((path[2],3*np.ones(len(princ))))
 
-                p_now_y = p_now_y + del_h
+                p_now_y = p_now_y + del_h - h
                 p_now.y = p_now_y
                 inicio = 2
 
@@ -206,13 +209,13 @@ class Paths:
                 inicio = 3
 
             elif inicio == 3: # desce
-                princ = np.arange(p_now_y, p_now_y - del_h,-0.1)
+                princ = np.arange(p_now_y, p_now_y - del_h + h,-0.1)
 
                 path[0] = np.hstack((path[0],p_now_x*np.ones(len(princ))))
                 path[1] = np.hstack((path[1],princ))
                 path[2] = np.hstack((path[2],self.height*np.ones(len(princ))))
 
-                p_now_y = p_now_y - del_h
+                p_now_y = p_now_y - del_h + h
                 p_now.y = p_now_y
                 inicio = 4
 
@@ -360,30 +363,78 @@ class Paths:
 
 
     # Function to send a array of markers, representing the curve, to rviz
-    def arrange_cells(self):
-        if self.robot_number == 0 or self.robot_number == 2 or self.robot_number == 3:
-            del_w = .75*self.area.x 
-            del_x = del_w - self.area.x /2
-        else:
-            del_w = .25*self.area.x 
-            del_x = self.area.x/2
-        
-        if self.robot_number == 0 or self.robot_number == 2 or self.robot_number == 3:
-            del_h = self.area.y/3 
-            if self.robot_number == 0:
-                del_y = del_h/2
-            elif self.robot_number == 3:
-                del_y = - del_h/2
+    def arrange_cells(self,p0,h):
+        if self.number_of_robots == 1:
+            return self.area.x/2,-self.area.y/2,self.area.x,self.area.y
+        elif self.number_of_robots == 3:
+            if self.robot_number == 0 or self.robot_number == 1:
+                del_w = 2*self.area.x/3
+                del_x = del_w - self.area.x/2
+                del_h = self.area.y/2
+                if self.robot_number == 0:
+                    del_y = 0
+                else:
+                    del_y = -del_h
             else:
-                del_y = - 3*del_h/2
-        else:
-            del_h = self.area.y/2
-            if self.robot_number == 1:
-                del_y = 0
-            else:
-                del_y = - self.area.y/2
+                del_w = 1*self.area.x/3
+                del_x = self.area.x/2
+                del_h = self.area.y
+                del_y = -self.area.y/2
 
-        return del_x,del_y,del_w,del_h
+        elif self.number_of_robots == 5:
+            if self.robot_number == 0 or self.robot_number == 2 or self.robot_number == 3:
+                del_w = .75*self.area.x 
+                del_x = del_w - self.area.x /2
+            else:
+                del_w = .25*self.area.x 
+                del_x = self.area.x/2
+            
+            if self.robot_number == 0 or self.robot_number == 2 or self.robot_number == 3:
+                del_h = self.area.y/3 
+                if self.robot_number == 0:
+                    del_y = del_h/2
+                elif self.robot_number == 3:
+                    del_y = - del_h/2
+                else:
+                    del_y = - 3*del_h/2
+            else:
+                del_h = self.area.y/2
+                if self.robot_number == 1:
+                    del_y = 0
+                else:
+                    del_y = - self.area.y/2
+        
+
+        right_to_area = bool
+        above_area = bool
+
+        if (p0[0] - del_x) > 0:
+            right_to_area = True
+            p_now_x = del_x -h
+            p_final_x = del_x - del_w
+
+        else:
+            right_to_area = False
+            p_now_x = del_x - del_w + h
+            p_final_x = del_x 
+
+        if (p0[1] - (del_y + del_h)) > 0:
+            above_area = True
+            p_now_y = del_y + del_h - h
+            p_final_y = del_y
+            inicio = 3
+
+        else:
+            above_area = False
+            p_now_y = del_y + h
+            p_final_y = del_y + del_h
+            inicio = 1
+
+        p_now = Point()
+        p_now.x = p_now_x
+        p_now.y = p_now_y
+
+        return del_x,del_y,del_w,del_h,[p_now_x,p_now_y,self.height]
         
 
 
@@ -539,11 +590,9 @@ class Paths:
 
         self.arrange()
         # Generate one of the curve types
-        #path = self.refference_path_1(self.number_of_samples,self.pos[self.robot_number])
-        print(self.pos)
-        del_x,del_y,del_w,del_h = self.arrange_cells()
-        print(del_x,del_y,del_w,del_h)
-        path = self.refference_path_1(1,self.pos[0],del_x,del_y,del_w,del_h)
+        del_x,del_y,del_w,del_h,self.pos_search_site = self.arrange_cells(self.pos[self.robot_number],self.range_vision)
+        
+        path = self.refference_path_2(self.number_of_samples,self.pos[self.robot_number],self.pos_search_site)
 
         # Create message with the points of the curve
         path_msg = self.create_path_msg(path,False)
@@ -578,6 +627,7 @@ class Paths:
             if self.robot_number == 1:
                 print(self.pos)
 
+            # States Machine
 
             # Wait 5 seconds Stage
             if (self.etapa == 0):
@@ -585,11 +635,21 @@ class Paths:
                 self.etapa += 1
                 print(f"a{self.robot_number}")
 
+            # Go to Search Site
+            elif (not self.search_site and self.etapa == 1):
+                self.pub_state.publish(self.etapa)
+                self.pub_path.publish(path_msg)
+                self.send_curve_to_rviz(path, self.pub_rviz_curve)
+                x = np.linalg.norm(np.array(self.pos[self.robot_number]) - np.array(self.pos_search_site))
 
+                if (x <= 0.2):
+                    self.search_site = 1
 
             # Search Fire Stage
-            elif (not self.saw_it and self.etapa == 1):
+            elif (self.search_site and not self.saw_it and self.etapa == 1):
                 self.pub_state.publish(self.etapa)
+                path = self.refference_path_1(self.range_vision,self.pos[0],del_x,del_y,del_w,del_h)
+                path_msg = self.create_path_msg(path,False)
                 self.send_curve_to_rviz(path, self.pub_rviz_curve)
                 self.pub_path.publish(path_msg)
                 print(f"b{self.robot_number}")
