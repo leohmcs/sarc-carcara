@@ -96,7 +96,7 @@ class Paths:
     # Callback of robots sensor data
     def vision_cb(self,data, args):
         self.seen_it[args] = data.saw_it
-        self.pos_des[args] = [data.x,data.y,data.z]
+        self.pos_des[args] = [data.x,data.y,self.height]
 
         self.fire_extinguished[args] = data.fire_extinguished
         
@@ -147,24 +147,26 @@ class Paths:
 
         if (p0[0] - del_x) > 0:
             right_to_area = True
-            p_now_x = del_x -h
-            p_final_x = del_x - del_w
+            p_now_x = del_x
+            p_final_x = del_x - del_w + h
+            inicio2 = 1
 
         else:
             right_to_area = False
-            p_now_x = del_x - del_w + h
-            p_final_x = del_x 
+            p_now_x = del_x - del_w
+            p_final_x = del_x - h
+            inicio2 = 3
 
         if (p0[1] - (del_y + del_h)) > 0:
             above_area = True
-            p_now_y = del_y + del_h - h
-            p_final_y = del_y
+            p_now_y = del_y + del_h
+            p_final_y = del_y + h
             inicio = 3
 
         else:
             above_area = False
-            p_now_y = del_y + h
-            p_final_y = del_y + del_h
+            p_now_y = del_y
+            p_final_y = del_y + del_h - h
             inicio = 1
 
         p_now = Point()
@@ -174,74 +176,143 @@ class Paths:
         # Loop to sample the curve
         path = [[],[],[]]
 
-        while self.comparison(p_now.x, p_final_x, right_to_area):
-            if inicio == 1: # sobe
-                princ = np.arange(p_now_y, p_now_y + del_h - h,0.1)
-                print("MELECA")
-                print(p_now.x,p_final_x)
-                print(self.comparison(p_now.x, p_final_x, right_to_area))
-                path[0] = np.hstack((path[0],p_now_x*np.ones(len(princ))))
-                path[1] = np.hstack((path[1],princ))
-                path[2] = np.hstack((path[2],3*np.ones(len(princ))))
+        if del_w < del_h:
+            while self.comparison(p_now.x, p_final_x, right_to_area):
 
-                p_now_y = p_now_y + del_h - h
-                p_now.y = p_now_y
-                inicio = 2
+                    if inicio == 1: # sobe
+                        princ = np.arange(p_now_y, p_now_y + del_h - h,0.1)
+            
+                        path[0] = np.hstack((path[0],p_now_x*np.ones(len(princ))))
+                        path[1] = np.hstack((path[1],princ))
+                        path[2] = np.hstack((path[2],self.height*np.ones(len(princ))))
 
-            elif inicio == 2: # avança
-                if right_to_area:
-                    princ = np.arange(p_now_x, p_now_x - h,-0.1)
-                else:
-                    princ = np.arange(p_now_x, p_now_x + h,0.1)
+                        p_now_y = p_now_y + del_h - h
+                        p_now.y = p_now_y
+                        inicio = 2
 
-                path[0] = np.hstack((path[0],princ))
-                path[1] = np.hstack((path[1],p_now_y*np.ones(len(princ))))
-                path[2] = np.hstack((path[2],self.height*np.ones(len(princ))))
+                    elif inicio == 2: # avança
+                        if right_to_area:
+                            princ = np.arange(p_now_x, p_now_x - h,-0.1)
+                        else:
+                            princ = np.arange(p_now_x, p_now_x + h,0.1)
 
-                if right_to_area:
-                    p_now_x = p_now_x - h
+                        path[0] = np.hstack((path[0],princ))
+                        path[1] = np.hstack((path[1],p_now_y*np.ones(len(princ))))
+                        path[2] = np.hstack((path[2],self.height*np.ones(len(princ))))
+
+                        if right_to_area:
+                            p_now_x = p_now_x - h
+                            p_now.x = p_now_x
+                        else:
+                            p_now_x = p_now_x + h
+                            p_now.x = p_now_x
+
+
+                        inicio = 3
+
+                    elif inicio == 3: # desce
+                        princ = np.arange(p_now_y, p_now_y - del_h + h,-0.1)
+
+                        path[0] = np.hstack((path[0],p_now_x*np.ones(len(princ))))
+                        path[1] = np.hstack((path[1],princ))
+                        path[2] = np.hstack((path[2],self.height*np.ones(len(princ))))
+
+                        p_now_y = p_now_y - del_h + h
+                        p_now.y = p_now_y
+                        inicio = 4
+
+                    elif inicio == 4: # avança
+                        if right_to_area:
+                            princ = np.arange(p_now_x, p_now_x - h,-0.1)
+                        else:
+                            princ = np.arange(p_now_x, p_now_x + h,0.1)
+
+                        path[0] = np.hstack((path[0],princ))
+                        path[1] = np.hstack((path[1],p_now_y*np.ones(len(princ))))
+                        path[2] = np.hstack((path[2],self.height*np.ones(len(princ))))
+
+                        if right_to_area:
+                            p_now_x = p_now_x - h
+                            p_now.x = p_now_x
+                        else:
+                            p_now_x = p_now_x + h
+                            p_now.x = p_now_x
+
+                        inicio = 1
+
+
+                    else:
+                        print("Something wrong with generating path of search")
+        else:
+            while self.comparison(p_now.y, p_final_y, above_area):
+                
+                if inicio2 == 1: # esquerda
+                    princ = np.arange(p_now_x, p_now_x - del_w + h,-0.1)
+
+                    path[0] = np.hstack((path[0],princ))
+                    path[1] = np.hstack((path[1],p_now_y*np.ones(len(princ))))
+                    path[2] = np.hstack((path[2],self.height*np.ones(len(princ))))
+
+                    p_now_x = p_now_x - del_w + h
                     p_now.x = p_now_x
-                else:
-                    p_now_x = p_now_x + h
+                    inicio2 = 2
+
+                elif inicio2 == 2: # avança
+                    if above_area:
+                        princ = np.arange(p_now_y, p_now_y - h,-0.1)
+                    else:
+                        princ = np.arange(p_now_y, p_now_y + h,0.1)
+
+                    path[0] = np.hstack((path[0],p_now_x*np.ones(len(princ))))
+                    path[1] = np.hstack((path[1],princ))
+                    path[2] = np.hstack((path[2],self.height*np.ones(len(princ))))
+
+                    if above_area:
+                        p_now_y = p_now_y - h
+                        p_now.y = p_now_y
+                    else:
+                        p_now_y = p_now_y + h
+                        p_now.y = p_now_y
+
+
+                    inicio2 = 3
+
+                elif inicio2 == 3: # direita
+                    princ = np.arange(p_now_x, p_now_x + del_w - h,0.1)
+
+                    path[0] = np.hstack((path[0],princ))
+                    path[1] = np.hstack((path[1],p_now_y*np.ones(len(princ))))
+                    path[2] = np.hstack((path[2],self.height*np.ones(len(princ))))
+
+                    p_now_x = p_now_x + del_w - h
                     p_now.x = p_now_x
+                    inicio2 = 4
+
+                elif inicio2 == 4: # avança
+                    if above_area:
+                        princ = np.arange(p_now_y, p_now_y - h,-0.1)
+                    else:
+                        princ = np.arange(p_now_y, p_now_y + h,0.1)
+
+                    path[0] = np.hstack((path[0],p_now_x*np.ones(len(princ))))
+                    path[1] = np.hstack((path[1],princ))
+                    path[2] = np.hstack((path[2],self.height*np.ones(len(princ))))
+
+                    if above_area:
+                        p_now_y = p_now_y - h
+                        p_now.y = p_now_y
+                    else:
+                        p_now_y = p_now_y + h
+                        p_now.y = p_now_y
+
+                    inicio2 = 1
 
 
-                inicio = 3
-
-            elif inicio == 3: # desce
-                princ = np.arange(p_now_y, p_now_y - del_h + h,-0.1)
-
-                path[0] = np.hstack((path[0],p_now_x*np.ones(len(princ))))
-                path[1] = np.hstack((path[1],princ))
-                path[2] = np.hstack((path[2],self.height*np.ones(len(princ))))
-
-                p_now_y = p_now_y - del_h + h
-                p_now.y = p_now_y
-                inicio = 4
-
-            elif inicio == 4: # avança
-                if right_to_area:
-                    princ = np.arange(p_now_x, p_now_x - h,-0.1)
                 else:
-                    princ = np.arange(p_now_x, p_now_x + h,0.1)
+                    print("Something wrong with genereting path of search")
 
-                path[0] = np.hstack((path[0],princ))
-                path[1] = np.hstack((path[1],p_now_y*np.ones(len(princ))))
-                path[2] = np.hstack((path[2],self.height*np.ones(len(princ))))
-
-                if right_to_area:
-                    p_now_x = p_now_x - h
-                    p_now.x = p_now_x
-                else:
-                    p_now_x = p_now_x + h
-                    p_now.x = p_now_x
-
-                inicio = 1
-
-
-            else:
-                print("Something wrong with genereting path of search")
-                print(inicio)
+            for i in range(len(path[0])):
+                print(path[0][i],path[1][i],path[2][i])
 
         return (path)
 
@@ -410,24 +481,26 @@ class Paths:
 
         if (p0[0] - del_x) > 0:
             right_to_area = True
-            p_now_x = del_x -h
-            p_final_x = del_x - del_w
+            p_now_x = del_x
+            p_final_x = del_x - del_w + h
+            inicio2 = 1
 
         else:
             right_to_area = False
-            p_now_x = del_x - del_w + h
-            p_final_x = del_x 
+            p_now_x = del_x - del_w
+            p_final_x = del_x - h
+            inicio2 = 3
 
         if (p0[1] - (del_y + del_h)) > 0:
             above_area = True
-            p_now_y = del_y + del_h - h
-            p_final_y = del_y
+            p_now_y = del_y + del_h
+            p_final_y = del_y + h
             inicio = 3
 
         else:
             above_area = False
-            p_now_y = del_y + h
-            p_final_y = del_y + del_h
+            p_now_y = del_y
+            p_final_y = del_y + del_h - h
             inicio = 1
 
         p_now = Point()
@@ -589,12 +662,13 @@ class Paths:
         self.rate.sleep()
 
         self.arrange()
+        p0 = self.pos[self.robot_number]
         # Generate one of the curve types
-        del_x,del_y,del_w,del_h,self.pos_search_site = self.arrange_cells(self.pos[self.robot_number],self.range_vision)
-        
-        path = self.refference_path_2(self.number_of_samples,self.pos[self.robot_number],self.pos_search_site)
+        del_x,del_y,del_w,del_h,self.pos_search_site = self.arrange_cells(p0,self.range_vision)
+        print("AAAAAAAAAAAAAAAAA")
+        print(self.pos_search_site)
 
-        # Create message with the points of the curve
+        path = self.refference_path_1(self.range_vision,p0,del_x,del_y,del_w,del_h)
         path_msg = self.create_path_msg(path,False)
 
         # Wait a bit
@@ -624,8 +698,6 @@ class Paths:
             #print(f"posdes{self.pos_des}")
             #print(f"fireextinguished{self.fire_extinguished}")
             #print(f"subscriber{self.vis_subscriber}")
-            if self.robot_number == 1:
-                print(self.pos)
 
             # States Machine
 
@@ -634,12 +706,18 @@ class Paths:
                 rospy.sleep(5)
                 self.etapa += 1
                 print(f"a{self.robot_number}")
+                poki = self.pos[self.robot_number]
 
             # Go to Search Site
-            elif (not self.search_site and self.etapa == 1):
+            elif (not self.search_site and self.etapa == 1 and not self.saw_it):
                 self.pub_state.publish(self.etapa)
-                self.pub_path.publish(path_msg)
-                self.send_curve_to_rviz(path, self.pub_rviz_curve)
+                path0 = self.refference_path_2(self.number_of_samples,poki,self.pos_search_site)
+
+                # Create message with the points of the curve
+                path_msg0 = self.create_path_msg(path0,False)
+                self.pub_path.publish(path_msg0)
+                self.send_curve_to_rviz(path0, self.pub_rviz_curve)
+
                 x = np.linalg.norm(np.array(self.pos[self.robot_number]) - np.array(self.pos_search_site))
 
                 if (x <= 0.2):
@@ -648,8 +726,6 @@ class Paths:
             # Search Fire Stage
             elif (self.search_site and not self.saw_it and self.etapa == 1):
                 self.pub_state.publish(self.etapa)
-                path = self.refference_path_1(self.range_vision,self.pos[0],del_x,del_y,del_w,del_h)
-                path_msg = self.create_path_msg(path,False)
                 self.send_curve_to_rviz(path, self.pub_rviz_curve)
                 self.pub_path.publish(path_msg)
                 print(f"b{self.robot_number}")
@@ -730,11 +806,9 @@ class Paths:
                 self.path3 = self.refference_path_3(self.number_of_samples,self.pos2)
                 self.path_msg3 = self.create_path_msg(self.path3,True)
                 print("g")
-                print(self.etapa)
-                print(self.fire_extinguished)
 
             elif (self.etapa == 5 and not self.fire_extinguished[self.robot_number]):
-                print(int((self.number_of_robots-1)/2))
+
                 self.pub_state.publish(self.etapa)
                 self.pub_path.publish(self.path_msg3)
                 self.send_curve_to_rviz(self.path3, self.pub_rviz_curve)
@@ -766,7 +840,6 @@ class Paths:
                 self.pub_path.publish(self.path_msg2)
                 self.send_curve_to_rviz(self.path2, self.pub_rviz_curve)
                 print("j")
-                print(x)
 
             elif (self.etapa == 7):
                 print("Simulation Finished")
